@@ -9,6 +9,7 @@ import io
 from datetime import datetime
 import json
 import math
+from pathlib import Path
 
 # # OSError: [Errno 113] No route to host  ---------------------->   your network is low
 
@@ -22,19 +23,28 @@ def dictToJSON(dict1, filename):
 
 
 def extraction(ds, filename):
-    
+    json_dir = Path("jsons")
+    csv_dir = Path("csvs")
+    json_dir.mkdir(parents=True, exist_ok=True)
+    csv_dir.mkdir(parents=True, exist_ok=True)
+
+    skip_vars = {
+        "PRES_QC", "TEMP_QC", "PSAL_QC", "PRES_ADJUSTED", "TEMP_ADJUSTED", "PSAL_ADJUSTED",
+        "PRES_ADJUSTED_QC", "TEMP_ADJUSTED_QC", "PSAL_ADJUSTED_QC", "PRES_ADJUSTED_ERROR",
+        "TEMP_ADJUSTED_ERROR", "PSAL_ADJUSTED_ERROR", "STATION_PARAMETERS", "DIRECTION",
+        "DATA_CENTER", "DATA_MODE", "FLOAT_SERIAL_NO", "POSITION_QC", "PROFILE_PRES_QC",
+        "PROFILE_TEMP_QC", "PROFILE_PSAL_QC", "CONFIG_MISSION_NUMBER"
+    }
+
     dict1 = {}
     n = 0
 
     for var in ds.variables:
-        
-        if len(ds[var].shape) == 1: # means put in json
-            # print(var)
+        if len(ds[var].shape) == 1:     # means put in json
             dict1[var] = ds[var].values
             n = len(ds[var])
-        
 
-        if var == "PRES_QC" or var == "TEMP_QC" or var == "PSAL_QC" or var == "PRES_ADJUSTED" or var == "TEMP_ADJUSTED" or var == "PSAL_ADJUSTED" or var == "PRES_ADJUSTED_QC" or var == "TEMP_ADJUSTED_QC" or var == "PSAL_ADJUSTED_QC" or var == "PRES_ADJUSTED_ERROR" or var == "TEMP_ADJUSTED_ERROR" or var == "PSAL_ADJUSTED_ERROR" or var == "STATION_PARAMETERS" or var == "DIRECTION" or var == "DATA_CENTER" or var == "DATA_MODE" or var == "FLOAT_SERIAL_NO" or var == "POSITION_QC" or var == "PROFILE_PRES_QC" or var == "PROFILE_TEMP_QC" or var == "PROFILE_PSAL_QC" or var == "CONFIG_MISSION_NUMBER": continue
+        if var in skip_vars: continue
         # if len(ds[var].shape)>0:
         #     if len(ds[var].shape) == 3: continue
         #     for i in range(ds[var].shape[0]):
@@ -57,50 +67,38 @@ def extraction(ds, filename):
     
     # print(dict1)
 
-    with open(f'{filename}.json', 'a') as f:
-            f.write("{")
-            f.close()
+    rows = []
+    json_data = {}
 
     for i in range(n):
         dict_form = {}
-        for k,v in dict1.items():
+        for k, v in dict1.items():
             value = v[i]
-            if isinstance(value, bytes):  
+            if isinstance(value, bytes):
                 value = value.decode("utf-8").strip()
-            if isinstance(value,  np.float64):
-                # print("float64")
+            if isinstance(value, np.float64):
                 value = float(value)
-            if isinstance(value,  np.datetime64):
+            if isinstance(value, np.datetime64):
                 value = str(value)
             if isinstance(value, float) and math.isnan(value):
                 value = "-"
-            # print(type(value))
             dict_form[k] = value
-        # print(dict_form)
+        rows.append(dict_form)
 
-        with open(f'{filename}.json', 'a') as f:
-            f.write(f'"{dict_form["PLATFORM_NUMBER"]}/{dict_form["JULD"]}":')
-            f.close()
+        
+        key = f'{dict_form["PLATFORM_NUMBER"]}/{dict_form["JULD"]}'
+        json_data[key] = dict_form
 
-        dictToJSON(dict_form, filename)
+   
+    json_path = json_dir / f"{filename}.json"
+    json_path.write_text(json.dumps(json_data, indent=4), encoding="utf-8")
 
 
-    with open(f'{filename}.json', "r") as file:
-        content = file.read()
-        if content:
-            content = content[:-1]
+    csv_path = csv_dir / f"{filename}.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
 
-        with open(f'{filename}.json', "w") as f:
-            f.write(content)
-            f.close()
-    
-        file.close()
-
-    with open(f'{filename}.json', 'a') as f:
-        f.write("}")
-        f.close()
-    
-    print("json convertion done ...")
+    print(f"JSON saved to {json_path}")
+    print(f"CSV saved to {csv_path}")
 
 
 def fun(link):
